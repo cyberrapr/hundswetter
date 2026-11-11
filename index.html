@@ -18,6 +18,9 @@
   #day { white-space: pre-line; font-size: 1.1rem; }
   button { font: inherit; padding: 14px; border: 0; border-radius: 12px; background: #e8eaed; color: #111; font-weight: 700; width: 100%; margin-top: 28px; }
   button.link { background: none; color: #99a; font-weight: 400; margin-top: 8px; }
+  .row { display: flex; gap: 12px; }
+  label { flex: 1; font-size: .85rem; color: #99a; }
+  input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 12px; font: inherit; border: 1px solid #556; border-radius: 10px; background: #111; color: inherit; }
 </style>
 
 <div id="verdict" role="status" aria-live="polite">…</div>
@@ -31,7 +34,17 @@
 <div id="day">…</div>
 
 <button id="check">Prüfen</button>
-<button id="loc" class="link">Standort neu setzen</button>
+<button id="loc" class="link">Standort ändern</button>
+
+<form id="place" hidden>
+  <h2>Standort</h2>
+  <div class="row">
+    <label>Breite <input id="lat" type="number" step="any" min="-90" max="90" required placeholder="52.52"></label>
+    <label>Länge <input id="lon" type="number" step="any" min="-180" max="180" required placeholder="13.40"></label>
+  </div>
+  <button type="button" id="gps" class="link">Aktuellen Standort einsetzen</button>
+  <button type="submit">Speichern</button>
+</form>
 
 <script type="module">
 import { steps, dryMinutes, dayWindows, formatDay, DAY_FROM, DAY_TO } from './rain.js';
@@ -49,19 +62,24 @@ function getPlace() {
   try { return JSON.parse(localStorage.getItem('place')); } catch { return null; }
 }
 
-function askPlace() {
-  return new Promise((resolve, reject) => {
-    const typed = () => {
-      // Fallback when geolocation is denied/unavailable. prompt() is fine for a one-time setup.
-      const s = prompt('Standort als "Breite, Länge" (z.B. 52.52, 13.40):');
-      const m = s && s.match(/(-?\d+(?:[.,]\d+)?)\s*[,; ]\s*(-?\d+(?:[.,]\d+)?)/);
-      m ? resolve({ lat: +m[1].replace(',', '.'), lon: +m[2].replace(',', '.') }) : reject(new Error('Kein Standort'));
-    };
-    if (!navigator.geolocation) return typed();
-    navigator.geolocation.getCurrentPosition(
-      p => resolve({ lat: +p.coords.latitude.toFixed(3), lon: +p.coords.longitude.toFixed(3) }), typed);
-  }).then(p => { try { localStorage.setItem('place', JSON.stringify(p)); } catch {} return p; });
+function editPlace() {
+  const p = getPlace();
+  if (p) { $('lat').value = p.lat; $('lon').value = p.lon; }
+  $('place').hidden = false;
+  $('lat').focus();
 }
+
+$('gps').onclick = () => navigator.geolocation?.getCurrentPosition(
+  p => { $('lat').value = p.coords.latitude.toFixed(3); $('lon').value = p.coords.longitude.toFixed(3); },
+  () => { $('note').textContent = 'Standort nicht verfügbar – bitte eintippen'; });
+
+$('place').onsubmit = e => {
+  e.preventDefault(); // inputs are validated by the browser (required, min/max)
+  try { localStorage.setItem('place', JSON.stringify({ lat: +$('lat').value, lon: +$('lon').value })); }
+  catch { return show('err', 'Speichern nicht möglich', 'Browser blockiert lokalen Speicher'); }
+  $('place').hidden = true;
+  check();
+};
 
 async function json(url) {
   const r = await fetch(url);
@@ -70,9 +88,11 @@ async function json(url) {
 }
 
 async function check() {
+  const place = getPlace();
+  if (!place) { show('', 'Standort setzen', 'Einmal eintragen, wird auf dem Handy gespeichert'); return editPlace(); }
   show('', '…');
   try {
-    const { lat, lon } = getPlace() || await askPlace();
+    const { lat, lon } = place;
     const now = Date.now();
     const from = new Date(now - 5 * 60000).toISOString();
     const d = new Date(now), today = `${d.getFullYear()}-${hh(d.getMonth() + 1)}-${hh(d.getDate())}`;
@@ -113,7 +133,7 @@ async function check() {
 }
 
 $('check').onclick = check;
-$('loc').onclick = () => { try { localStorage.removeItem('place'); } catch {} check(); };
+$('loc').onclick = editPlace;
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && check());
 check();
 </script>
