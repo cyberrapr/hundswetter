@@ -1,0 +1,18 @@
+name: morning
+on:
+  schedule:
+    # 05:45 so the push is there by 06:00 even when GitHub starts the job late
+    - cron: '45 5 * * *'
+      timezone: 'Europe/Berlin'
+  workflow_dispatch:
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node morning.mjs
+        env:
+          LAT: ${{ secrets.LAT }}
+          LON: ${{ secrets.LON }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          PAGE_URL: ${{ vars.PAGE_URL }}

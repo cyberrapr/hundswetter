@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="de">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1b1f24">
+<title>Hundswetter</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 20px 16px; font: 16px/1.4 system-ui, sans-serif; background: #1b1f24; color: #e8eaed; max-width: 480px; margin-inline: auto; }
+  #verdict { border-radius: 16px; padding: 28px 20px; font-size: 1.6rem; font-weight: 700; text-align: center; background: #333; }
+  #verdict.go { background: #1e6b3a; } #verdict.soon { background: #8a6d00; } #verdict.wet { background: #1d4f91; } #verdict.err { background: #7a2626; }
+  #note { text-align: center; margin: 10px 0 24px; color: #aab; min-height: 1.4em; }
+  h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: #99a; margin: 20px 0 6px; }
+  #strip { display: flex; gap: 2px; height: 36px; }
+  #strip i { flex: 1; border-radius: 3px; background: #2f6b45; }
+  #strip i.r1 { background: #5b9bd5; } #strip i.r2 { background: #2f6fc4; } #strip i.r3 { background: #b04ad0; }
+  .ticks { display: flex; justify-content: space-between; font-size: .8rem; color: #99a; margin-top: 4px; }
+  #day { white-space: pre-line; font-size: 1.1rem; }
+  button { font: inherit; padding: 14px; border: 0; border-radius: 12px; background: #e8eaed; color: #111; font-weight: 700; width: 100%; margin-top: 28px; }
+  button.link { background: none; color: #99a; font-weight: 400; margin-top: 8px; }
+</style>
+
+<div id="verdict" role="status" aria-live="polite">…</div>
+<div id="note"></div>
+
+<h2>Nächste 2 Stunden</h2>
+<div id="strip"></div>
+<div class="ticks"><span id="t0"></span><span id="t1"></span><span id="t2"></span></div>
+
+<h2>Heute</h2>
+<div id="day">…</div>
+
+<button id="check">Prüfen</button>
+<button id="loc" class="link">Standort neu setzen</button>
+
+<script type="module">
+import { steps, dryMinutes, dayWindows, formatDay, DAY_FROM, DAY_TO } from './rain.js';
+
+const $ = id => document.getElementById(id);
+const api = 'https://api.brightsky.dev';
+const clock = ms => new Date(ms).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+const hh = n => String(n).padStart(2, '0');
+
+function show(cls, text, note = '') {
+  $('verdict').className = cls; $('verdict').textContent = text; $('note').textContent = note;
+}
+
+function getPlace() {
+  try { return JSON.parse(localStorage.getItem('place')); } catch { return null; }
+}
+
+function askPlace() {
+  return new Promise((resolve, reject) => {
+    const typed = () => {
+      // Fallback when geolocation is denied/unavailable. prompt() is fine for a one-time setup.
+      const s = prompt('Standort als "Breite, Länge" (z.B. 52.52, 13.40):');
+      const m = s && s.match(/(-?\d+(?:[.,]\d+)?)\s*[,; ]\s*(-?\d+(?:[.,]\d+)?)/);
+      m ? resolve({ lat: +m[1].replace(',', '.'), lon: +m[2].replace(',', '.') }) : reject(new Error('Kein Standort'));
+    };
+    if (!navigator.geolocation) return typed();
+    navigator.geolocation.getCurrentPosition(
+      p => resolve({ lat: +p.coords.latitude.toFixed(3), lon: +p.coords.longitude.toFixed(3) }), typed);
+  }).then(p => { try { localStorage.setItem('place', JSON.stringify(p)); } catch {} return p; });
+}
+
+async function json(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Wetterdienst antwortet nicht (${r.status})`);
+  return r.json();
+}
+
+async function check() {
+  show('', '…');
+  try {
+    const { lat, lon } = getPlace() || await askPlace();
+    const now = Date.now();
+    const from = new Date(now - 5 * 60000).toISOString();
+    const d = new Date(now), today = `${d.getFullYear()}-${hh(d.getMonth() + 1)}-${hh(d.getDate())}`;
+    const [radar, weather] = await Promise.all([
+      // distance=2000 → ~5×5 km box around home; date=now → records reach the full +2 h nowcast
+      json(`${api}/radar?lat=${lat}&lon=${lon}&distance=2000&format=plain&date=${encodeURIComponent(from)}`),
+      json(`${api}/weather?lat=${lat}&lon=${lon}&tz=Europe/Berlin&date=${today}T${hh(DAY_FROM)}:00&last_date=${today}T${hh(DAY_TO)}:00`),
+    ]);
+
+    const r = dryMinutes(radar.radar, now);
+    if (!r) show('err', 'Keine aktuellen Radardaten');
+    else {
+      const at = clock(now + r.minutes * 60000);
+      const sure = r.minutes <= 30 ? 'Ziemlich sicher' : 'Wahrscheinlich – Radarprognose wird nach 30 min ungenauer';
+      if (!r.wet && r.capped) show('go', `Trocken für mindestens ${r.minutes} min`, `Kein Regen in Sicht bis ${at}`);
+      else if (!r.wet && r.minutes <= 5) show('wet', 'Regen fängt gleich an');
+      else if (!r.wet) show(r.minutes >= 30 ? 'go' : 'soon', `Trocken für ca. ${r.minutes} min`, `Regen ab ${at} · ${sure}`);
+      else if (r.capped) show('wet', 'Es regnet', `Kein Ende in den nächsten ${r.minutes} min`);
+      else show('wet', `Es regnet – Pause ab ca. ${at}`, `in ${r.minutes} min · ${sure}`);
+    }
+
+    const s = steps(radar.radar, now);
+    $('strip').replaceChildren(...s.map(x => {
+      const i = document.createElement('i');
+      i.className = x.mm > 50 ? 'r3' : x.mm > 10 ? 'r2' : x.mm > 0 ? 'r1' : '';
+      i.title = `${clock(x.t)}: ${(x.mm / 100).toFixed(2)} mm`;
+      return i;
+    }));
+    if (s.length) {
+      $('t0').textContent = 'jetzt';
+      $('t1').textContent = clock((s[0].t + s.at(-1).t) / 2);
+      $('t2').textContent = clock(s.at(-1).t + 300000);
+    }
+    $('day').textContent = formatDay(dayWindows(weather.weather));
+  } catch (e) {
+    show('err', 'Hat nicht geklappt', e.message);
+  }
+}
+
+$('check').onclick = check;
+$('loc').onclick = () => { try { localStorage.removeItem('place'); } catch {} check(); };
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && check());
+check();
+</script>
+</html>
