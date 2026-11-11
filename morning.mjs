@@ -10,14 +10,26 @@ const hh = n => String(n).padStart(2, '0');
 const url = `https://api.brightsky.dev/weather?lat=${LAT}&lon=${LON}&tz=${tz}` +
   `&date=${today}T${hh(DAY_FROM)}:00&last_date=${today}T${hh(DAY_TO)}:00`;
 
-const res = await fetch(url);
-if (!res.ok) throw new Error(`Bright Sky ${res.status}`);
-const text = formatDay(dayWindows((await res.json()).weather));
+// Servers sometimes refuse a connection from GitHub's runners; one blip must not cost the day's push.
+// Errors name only the host — the full URL holds the location / topic and logs are public.
+async function get(url, opt) {
+  for (let left = 3; ; left--) {
+    try {
+      const r = await fetch(url, opt);
+      if (r.ok) return r;
+      throw new Error(`${new URL(url).host} answered ${r.status}`);
+    } catch (e) {
+      if (!left) throw e;
+      await new Promise(done => setTimeout(done, 20000));
+    }
+  }
+}
 
-const push = await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+const text = formatDay(dayWindows((await (await get(url)).json()).weather));
+
+await get(`https://ntfy.sh/${NTFY_TOPIC}`, {
   method: 'POST',
   body: text,
   headers: { Title: 'Hundswetter heute', Tags: 'dog', ...(PAGE_URL && { Click: PAGE_URL }) },
 });
-if (!push.ok) throw new Error(`ntfy ${push.status}`);
 console.log(text);
