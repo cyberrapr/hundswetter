@@ -18,8 +18,8 @@
   #day { white-space: pre-line; font-size: 1.1rem; }
   button { font: inherit; padding: 14px; border: 0; border-radius: 12px; background: #e8eaed; color: #111; font-weight: 700; width: 100%; margin-top: 28px; }
   button.link { background: none; color: #99a; font-weight: 400; margin-top: 8px; }
-  .row { display: flex; gap: 12px; }
-  label { flex: 1; font-size: .85rem; color: #99a; }
+  button.hit { background: #2a3038; color: inherit; font-weight: 400; text-align: left; margin-top: 6px; }
+  #hits { margin-top: 6px; color: #aab; }
   input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 12px; font: inherit; border: 1px solid #556; border-radius: 10px; background: #111; color: inherit; }
 </style>
 
@@ -38,12 +38,10 @@
 
 <form id="place" hidden>
   <h2>Standort</h2>
-  <div class="row">
-    <label>Breite <input id="lat" type="number" step="any" min="-90" max="90" required placeholder="52.52"></label>
-    <label>Länge <input id="lon" type="number" step="any" min="-180" max="180" required placeholder="13.40"></label>
-  </div>
-  <button type="button" id="gps" class="link">Aktuellen Standort einsetzen</button>
-  <button type="submit">Speichern</button>
+  <input id="q" type="search" required minlength="2" autocomplete="off" aria-label="Ort, PLZ oder Straße" placeholder="Ort, PLZ oder Straße">
+  <div id="hits"></div>
+  <button type="submit">Suchen</button>
+  <button type="button" id="gps" class="link">Aktuellen Standort verwenden</button>
 </form>
 
 <script type="module">
@@ -63,22 +61,40 @@ function getPlace() {
 }
 
 function editPlace() {
-  const p = getPlace();
-  if (p) { $('lat').value = p.lat; $('lon').value = p.lon; }
+  $('hits').replaceChildren();
   $('place').hidden = false;
-  $('lat').focus();
+  $('q').focus();
 }
 
-$('gps').onclick = () => navigator.geolocation?.getCurrentPosition(
-  p => { $('lat').value = p.coords.latitude.toFixed(3); $('lon').value = p.coords.longitude.toFixed(3); },
-  () => { $('note').textContent = 'Standort nicht verfügbar – bitte eintippen'; });
-
-$('place').onsubmit = e => {
-  e.preventDefault(); // inputs are validated by the browser (required, min/max)
-  try { localStorage.setItem('place', JSON.stringify({ lat: +$('lat').value, lon: +$('lon').value })); }
+function savePlace(lat, lon, name) {
+  try { localStorage.setItem('place', JSON.stringify({ lat: +lat.toFixed(3), lon: +lon.toFixed(3), name })); }
   catch { return show('err', 'Speichern nicht möglich', 'Browser blockiert lokalen Speicher'); }
   $('place').hidden = true;
   check();
+}
+
+$('gps').onclick = () => navigator.geolocation?.getCurrentPosition(
+  p => savePlace(p.coords.latitude, p.coords.longitude, 'GPS-Standort'),
+  () => { $('note').textContent = 'Standort nicht verfügbar – bitte Ort suchen'; });
+
+// Place search via Photon (OpenStreetMap), limited to the area the DWD radar covers.
+$('place').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    const { features } = await json('https://photon.komoot.io/api/?lang=de&limit=6&bbox=5.8,47.2,15.1,55.1&q=' + encodeURIComponent($('q').value));
+    const seen = new Set();
+    $('hits').replaceChildren(...features.flatMap(f => {
+      const p = f.properties, [lon, lat] = f.geometry.coordinates;
+      const name = [...new Set([p.name, p.street, [p.postcode, p.city].filter(Boolean).join(' '), p.state].filter(Boolean))].join(', ');
+      if (seen.has(name)) return [];
+      seen.add(name);
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'hit'; b.textContent = name;
+      b.onclick = () => savePlace(lat, lon, name);
+      return [b];
+    }));
+    if (!features.length) $('hits').textContent = 'Nichts gefunden';
+  } catch (err) { $('hits').textContent = err.message; }
 };
 
 async function json(url) {
@@ -93,6 +109,7 @@ async function check() {
   show('', '…');
   try {
     const { lat, lon } = place;
+    $('loc').textContent = `Standort: ${place.name || `${lat}, ${lon}`} · ändern`;
     const now = Date.now();
     const from = new Date(now - 5 * 60000).toISOString();
     const d = new Date(now), today = `${d.getFullYear()}-${hh(d.getMonth() + 1)}-${hh(d.getDate())}`;
