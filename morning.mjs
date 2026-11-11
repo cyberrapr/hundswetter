@@ -13,15 +13,18 @@ const url = `https://api.brightsky.dev/weather?lat=${LAT}&lon=${LON}&tz=${tz}` +
 // Servers sometimes refuse a connection from GitHub's runners; one blip must not cost the day's push.
 // Errors name only the host — the full URL holds the location / topic and logs are public.
 async function get(url, opt) {
+  const host = new URL(url).host;
   for (let left = 3; ; left--) {
+    let why;
     try {
       const r = await fetch(url, opt);
       if (r.ok) return r;
-      throw new Error(`${new URL(url).host} answered ${r.status}`);
+      why = `answered ${r.status}`;
     } catch (e) {
-      if (!left) throw e;
-      await new Promise(done => setTimeout(done, 20000));
+      why = `unreachable (${e.cause?.code ?? e.name})`; // never rethrow the raw error object
     }
+    if (!left) throw new Error(`${host} ${why}`);
+    await new Promise(done => setTimeout(done, 20000));
   }
 }
 
