@@ -28,11 +28,20 @@ async function get(url, opt) {
   }
 }
 
+// The schedule fires several times because GitHub sometimes drops or delays a run.
+// ntfy keeps recent messages, so ask it whether today's push already went out.
+const TITLE = 'Hundswetter heute';
+const recent = await (await get(`https://ntfy.sh/${NTFY_TOPIC}/json?poll=1&since=8h`)).text();
+if (recent.split('\n').some(line => line && JSON.parse(line).title === TITLE)) {
+  console.log('already sent today');
+  process.exit(0);
+}
+
 const text = formatDay(dayWindows((await (await get(url)).json()).weather));
 
 await get(`https://ntfy.sh/${NTFY_TOPIC}`, {
   method: 'POST',
   body: text,
-  headers: { Title: 'Hundswetter heute', Tags: 'dog', ...(PAGE_URL && { Click: PAGE_URL }) },
+  headers: { Title: TITLE, Tags: 'dog', ...(PAGE_URL && { Click: PAGE_URL }) },
 });
 console.log(text);

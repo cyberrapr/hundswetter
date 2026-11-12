@@ -1,8 +1,12 @@
 name: morning
 on:
   schedule:
-    # 05:45 so the push is there by 06:00 even when GitHub starts the job late
-    - cron: '45 5 * * *'
+    # Three tries: GitHub sometimes drops or delays scheduled runs. morning.mjs sends only once.
+    - cron: '47 4 * * *'
+      timezone: 'Europe/Berlin'
+    - cron: '17 5 * * *'
+      timezone: 'Europe/Berlin'
+    - cron: '47 5 * * *'
       timezone: 'Europe/Berlin'
   workflow_dispatch:
 jobs:
