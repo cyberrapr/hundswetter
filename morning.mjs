@@ -1,5 +1,5 @@
 // Morning push: today's dry windows → ntfy. Env: LAT, LON, NTFY_TOPIC, optional PAGE_URL.
-import { dayWindows, formatDay, DAY_FROM, DAY_TO } from './rain.js';
+import { steps, dayWindows, formatDay, DAY_FROM, DAY_TO } from './rain.js';
 
 const { LAT, LON, NTFY_TOPIC, PAGE_URL } = process.env;
 if (!LAT || !LON || !NTFY_TOPIC) throw new Error('LAT, LON and NTFY_TOPIC must be set');
@@ -37,7 +37,10 @@ if (recent.split('\n').some(line => line && JSON.parse(line).title === TITLE)) {
   process.exit(0);
 }
 
-const text = formatDay(dayWindows((await (await get(url)).json()).weather));
+// Radar covers the next 2 h and corrects the forecast there (same as the page does).
+const from = encodeURIComponent(new Date(Date.now() - 5 * 60000).toISOString());
+const radar = await (await get(`https://api.brightsky.dev/radar?lat=${LAT}&lon=${LON}&distance=2000&format=plain&date=${from}`)).json();
+const text = formatDay(dayWindows((await (await get(url)).json()).weather, steps(radar.radar)));
 
 await get(`https://ntfy.sh/${NTFY_TOPIC}`, {
   method: 'POST',

@@ -29,4 +29,12 @@ assert.equal(formatDay(dayWindows(day)), 'Trocken: 06–08, 10–11\nRegen: 08�
 assert.equal(formatDay(dayWindows([hour(7, 0), hour(8, 0)])), 'Ganzer Tag trocken (06–08)');
 assert.equal(formatDay([]), 'Keine Vorhersage verfügbar');
 
+// radar sees rain at 09:25 local (08:25Z) although the forecast says dry → 09–10 becomes wet
+const seen = [{ t: Date.parse('2026-11-12T08:25:00Z'), mm: 9 }, { t: Date.parse('2026-11-12T09:15:00Z'), mm: 0 }];
+assert.deepEqual(dayWindows([hour(9, 0, 3), hour(10, 0, 4), hour(11, 0, 4)], seen), [
+  { wet: false, from: 8, to: 9, prob: 3 },
+  { wet: true, from: 9, to: 10, prob: null },
+  { wet: false, from: 10, to: 11, prob: 4 },
+]);
+
 console.log('ok');

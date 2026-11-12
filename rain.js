@@ -1,7 +1,9 @@
 // Shared logic for quick-check page and morning push. Pure functions, no I/O.
 
 // Tuning knobs — real weather needs calibration, change here.
-export const DRY_5MIN = 0;    // radar: max value (0.01 mm / 5 min) in box that still counts as dry
+// radar: max value (0.01 mm / 5 min) in box that still counts as dry.
+// 1 = the smallest amount radar can report (≈0.1 mm/h, a trace you hardly feel); set 0 to be strict.
+export const DRY_5MIN = 1;
 export const WET_PROB = 40;   // hourly: rain probability (%) from which an hour counts as wet
 export const WET_MM_H = 0.2;  // hourly: amount (mm/h) from which an hour counts as wet
 export const DAY_FROM = 6, DAY_TO = 22; // walking hours
@@ -30,13 +32,18 @@ export function dryMinutes(records, now = Date.now()) {
 
 // Hourly records (timestamps in local time, value = previous 60 min) →
 // merged blocks [{ wet, from, to, prob }] between DAY_FROM and DAY_TO.
-export function dayWindows(hours) {
+// radarSteps (from steps()) override the forecast: the hourly forecast can miss a shower
+// that the radar already sees, and radar is what is really falling.
+export function dayWindows(hours, radarSteps = []) {
+  const hourOf = new Intl.DateTimeFormat('de-DE', { hour: 'numeric', hourCycle: 'h23', timeZone: 'Europe/Berlin' });
+  const radarWet = new Set(radarSteps.filter(s => s.mm > DRY_5MIN).map(s => parseInt(hourOf.format(s.t))));
   const blocks = [];
   for (const h of hours) {
     const from = (+h.timestamp.slice(11, 13) || 24) - 1; // record at 10:00 describes 09–10
     if (from < DAY_FROM || from >= DAY_TO) continue;
-    const prob = h.precipitation_probability; // null in observations
-    const wet = (prob ?? 0) >= WET_PROB || (h.precipitation ?? 0) >= WET_MM_H;
+    const seen = radarWet.has(from);
+    const prob = seen ? null : h.precipitation_probability; // forecast % means nothing once radar sees rain
+    const wet = seen || (prob ?? 0) >= WET_PROB || (h.precipitation ?? 0) >= WET_MM_H;
     const last = blocks[blocks.length - 1];
     if (last && last.wet === wet && last.to === from) {
       last.to = from + 1;

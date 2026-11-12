@@ -30,7 +30,7 @@
 <div id="strip"></div>
 <div class="ticks"><span id="t0"></span><span id="t1"></span><span id="t2"></span></div>
 
-<h2>Heute</h2>
+<h2>Heute · Vorhersage + Radar</h2>
 <div id="day">…</div>
 
 <button id="check">Prüfen</button>
@@ -45,7 +45,7 @@
 </form>
 
 <script type="module">
-import { steps, dryMinutes, dayWindows, formatDay, DAY_FROM, DAY_TO } from './rain.js';
+import { steps, dryMinutes, dayWindows, formatDay, DRY_5MIN, DAY_FROM, DAY_TO } from './rain.js';
 
 const $ = id => document.getElementById(id);
 const api = 'https://api.brightsky.dev';
@@ -134,7 +134,7 @@ async function check() {
     const s = steps(radar.radar, now);
     $('strip').replaceChildren(...s.map(x => {
       const i = document.createElement('i');
-      i.className = x.mm > 50 ? 'r3' : x.mm > 10 ? 'r2' : x.mm > 0 ? 'r1' : '';
+      i.className = x.mm > 50 ? 'r3' : x.mm > 10 ? 'r2' : x.mm > DRY_5MIN ? 'r1' : '';
       i.title = `${clock(x.t)}: ${(x.mm / 100).toFixed(2)} mm`;
       return i;
     }));
@@ -143,7 +143,7 @@ async function check() {
       $('t1').textContent = clock((s[0].t + s.at(-1).t) / 2);
       $('t2').textContent = clock(s.at(-1).t + 300000);
     }
-    $('day').textContent = formatDay(dayWindows(weather.weather));
+    $('day').textContent = formatDay(dayWindows(weather.weather, s));
   } catch (e) {
     show('err', 'Hat nicht geklappt', e.message);
   }
