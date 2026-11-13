@@ -8,12 +8,17 @@ on:
       timezone: 'Europe/Berlin'
     - cron: '47 5 * * *'
       timezone: 'Europe/Berlin'
+    # TEMP diagnostic: does any schedule fire on this repo? plain UTC vs. timezone entry
+    - cron: '*/10 * * * *'
+    - cron: '5-59/10 * * * *'
+      timezone: 'Europe/Berlin'
   workflow_dispatch:
 jobs:
   push:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: echo "trigger ${{ github.event_name }} / ${{ github.event.schedule }}"
       - run: node morning.mjs
         env:
           LAT: ${{ secrets.LAT }}
