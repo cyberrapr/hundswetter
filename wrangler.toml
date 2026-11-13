@@ -1,0 +1,13 @@
+# Cloudflare Worker that sends the morning push. Deploy: npx wrangler deploy
+# Secrets (not in this file): npx wrangler secret put LAT | LON | NTFY_TOPIC
+name = "hundswetter"
+main = "morning.mjs"
+compatibility_date = "2026-01-01"
+workers_dev = false
+
+[vars]
+PAGE_URL = "https://cyberrapr.github.io/hundswetter/"
+
+[triggers]
+# 05:45 local time: 03:45 UTC in summer, 04:45 UTC in winter. morning.mjs sends only at the right one.
+crons = ["45 3 * * *", "45 4 * * *"]

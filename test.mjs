@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { dryMinutes, dayWindows, formatDay } from './rain.js';
+import { isSendHour } from './morning.mjs';
 
 const now = Date.parse('2026-11-11T10:02:00Z');
 // radar records every 5 min starting 10:00, values = max in box
@@ -36,5 +37,11 @@ assert.deepEqual(dayWindows([hour(9, 0, 3), hour(10, 0, 4), hour(11, 0, 4)], see
   { wet: true, from: 9, to: 10, prob: null },
   { wet: false, from: 10, to: 11, prob: 4 },
 ]);
+
+// 05:45 local is 04:45 UTC in winter and 03:45 UTC in summer; the other cron slot must not send
+assert.equal(isSendHour(Date.parse('2026-11-14T04:45:00Z')), true);
+assert.equal(isSendHour(Date.parse('2026-11-14T03:45:00Z')), false);
+assert.equal(isSendHour(Date.parse('2026-07-14T03:45:00Z')), true);
+assert.equal(isSendHour(Date.parse('2026-07-14T04:45:00Z')), false);
 
 console.log('ok');
