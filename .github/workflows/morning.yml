@@ -1,13 +1,6 @@
 name: morning
 on:
-  schedule:
-    # Three tries: GitHub sometimes drops or delays scheduled runs. morning.mjs sends only once.
-    - cron: '47 4 * * *'
-      timezone: 'Europe/Berlin'
-    - cron: '17 5 * * *'
-      timezone: 'Europe/Berlin'
-    - cron: '47 5 * * *'
-      timezone: 'Europe/Berlin'
+  # No schedule: GitHub started scheduled runs about 7 hours late. The timer lives in wrangler.toml.
   workflow_dispatch:
 jobs:
   push:
